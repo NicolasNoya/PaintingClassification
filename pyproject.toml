@@ -6,6 +6,7 @@ authors = ["nnoya <nnoya@fing.edu.uy>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+torch = "^2.7.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
