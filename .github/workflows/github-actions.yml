@@ -1,0 +1,16 @@
+# .github/workflows/no-torch.yml
+name: Check pyproject.toml for forbidden dependencies
+
+on: [push, pull_request]
+
+jobs:
+  no-torch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check for forbidden dependency "torch"
+        run: |
+          if grep -i "torch" pyproject.toml; then
+            echo "❌ 'torch' should not be in pyproject.toml"
+            exit 1
+          fi
