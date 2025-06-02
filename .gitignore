@@ -1,3 +1,7 @@
 data
 .pychache
 __pycache__
+.venv
+venv
+env
+
