@@ -6,6 +6,8 @@ authors = ["nnoya <nnoya@fing.edu.uy>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+matplotlib = "^3.10.3"
+numpy = "^2.2.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
