@@ -1,12 +1,22 @@
+#%%
 # Basic implementation of a custom dataset for loading paintings.
-# TODO: Add data augmentation and transformations.
+# TODO: Check the papers for the default data augmentation and transformation techniques.
 
 import os 
 import torch
 from torch.utils.data import Dataset
 from torchvision.io import read_image
-from typing import Union, Dict
+from torchvision import transforms
+from typing import Union, Dict, Literal
 
+default_augment = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(10),
+        transforms.RandomResizedCrop(size=224, scale=(0.8, 1.0)),
+    ])
+
+default_transform = None
 
 class PaintingsDataset(Dataset):
     """
@@ -31,7 +41,7 @@ class PaintingsDataset(Dataset):
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path, augment= False, transform=False, custom_augment=None, custom_transform=None):
+    def __init__(self, data_path, augment= False, transform=False, custom_augment=None, custom_transform=None, padding: Literal['zero','mirror','replicate'] = 'zero', image_input_size: int = 224):
 
         # Path to the data directory
         self.data_path = data_path
@@ -52,8 +62,14 @@ class PaintingsDataset(Dataset):
         # Augmentation and transformation parameters
         self.augment = augment
         self.transform = transform
-        self.custom_augment = custom_augment
-        self.custom_transform = custom_transform
+        self.augmentation = (custom_augment if custom_augment is not None else default_augment)
+        self.transformation = (custom_transform if custom_transform is not None else default_transform)
+
+        # Padding configuration
+        if padding not in ['zero', 'mirror', 'replicate']:
+            raise ValueError("Padding must be one of 'zero', 'mirror', or 'replicate'.")
+        self.padding = padding
+        self.image_input_size = image_input_size
 
 
     def __len__(self):
@@ -73,23 +89,59 @@ class PaintingsDataset(Dataset):
         else:
             img_path = os.path.join(self.abstract_path, self.abstract_list[idx - self.len_figurative])
             label = 1
+
         image = read_image(img_path)
         output['image'] = image
         output['label'] = label
 
         if self.augment:
-            pass
+            output['image'] = self.augmentation(output['image']) 
         if self.transform:
-            pass
+            output['image'] = self.transformation(output['image'])
+
+        # Add the padding
+        C, H, W = output['image'].shape
+        # If the image is too big we just resize using nearest neighbor
+        if H > self.image_input_size or W > self.image_input_size:
+            HW_max = max(H, W)
+            scale_factor = self.image_input_size / HW_max
+            output['image'] = torch.nn.functional.interpolate(output['image'].unsqueeze(0), 
+                                                                scale_factor=scale_factor, 
+                                                                mode='nearest').squeeze(0) 
+        C, H, W = output['image'].shape
+        posH = max(0, (self.image_input_size - H) // 2)
+        posW = max(0, (self.image_input_size - W) // 2)
+        padding_tuple = (posW, posW + (self.image_input_size - W) % 2, posH, posH + (self.image_input_size - H) % 2)
+
+        if self.padding == 'zero':
+            padder = torch.nn.ZeroPad2d(padding_tuple)
+        elif self.padding == 'mirror':
+            padder = torch.nn.ReflectionPad2d(padding_tuple)
+        elif self.padding == 'replicate':
+            padder = torch.nn.ReplicationPad2d(padding_tuple) 
         
+        output['image'] = padder(output['image'])
         return output
+
+    def change_padding(self, padding: Literal['zero', 'mirror', 'replicate'], image_input_size: int = 224): 
+        """
+        Change the padding method used in the dataset.
+        """
+        if padding not in ['zero', 'mirror', 'replicate']:
+            raise ValueError("Padding must be one of 'zero', 'mirror', or 'replicate'.")
+        self.padding = padding
+        self.image_input_size = image_input_size
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     # Example usage
-    dataset = PaintingsDataset(data_path='data')
+    dataset = PaintingsDataset(data_path='data', padding='replicate', augment=True)
     print(f"Dataset length: {len(dataset)}")
-    sample = dataset[0]
+    random_index = torch.randint(0, len(dataset), (1,)).item()
+    print(f"Random sample index: {random_index}")
+    sample = dataset[7500]
     print(f"Sample image shape: {sample['image'].shape}, Label: {sample['label']}")
     plt.imshow(sample['image'].permute(1, 2, 0))  # Permute to (H, W, C) for plotting
     plt.show()
+    print("Image size:", sample['image'].shape)
