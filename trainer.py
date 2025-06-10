@@ -105,7 +105,7 @@ class Trainer:
         self.test_dataloader = DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
 
 
-    def train(self):
+    def rnn_train(self):
         self.model_instance.train()
         # for epochs, img_dict in enumerate(tqdm.tqdm(range(self.epochs), desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: {self.train_metric_manager.compute_metrics()}")):
         metric_dict = {}
@@ -145,11 +145,13 @@ class Trainer:
                 val_loss, val_dict = self.validate()
                 # Check the f1 score to save and the loss 
                 if val_dict["f1_score"] > self.best_f1_score:
-                    torch.save(self.model_instance.state_dict(), self.save_model_path+"best_f1_model.pth")
+                    torch.save(self.model_instance.state_dict(), self.save_model_path+f"best_f1_model{val_dict['f1_score']:.4f}.pth")
                     print(f"Model saved to {self.save_model_path}, best F1 score: {val_dict['f1_score']:.4f}")
+                    self.best_f1_score = val_dict["f1_score"]
                 if val_loss  < self.best_loss:
-                    torch.save(self.model_instance.state_dict(), self.save_model_path+"best_loss_model.pth")
+                    torch.save(self.model_instance.state_dict(), self.save_model_path+f"best_loss_model{val_loss:.4f}.pth")
                     print(f"Model saved to {self.save_model_path}, best loss: {val_loss:.4f}")
+                    self.best_loss = val_loss
                 print("The validation scores are:")
                 print(val_dict)
                 print(val_loss)
@@ -222,5 +224,5 @@ if __name__=="__main__":
         data_path="data",
         padding=PaddingOptions.ZERO
     )
-    train_metrics_dict = trainer.train()
+    train_metrics_dict = trainer.rnn_train()
     print(f"Training completed. Final metrics: {train_metrics_dict}")
