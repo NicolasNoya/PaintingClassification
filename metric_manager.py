@@ -13,9 +13,9 @@ class MetricManager:
         Initializes the MetricManager with the required metrics.
         """
         self.accuracy = Accuracy(task="binary").to(device)
-        self.f1_score = F1Score(num_classes=2, average='macro').to(device)
-        self.precision = Precision(num_classes=2, average='macro').to(device)
-        self.recall = Recall(num_classes=2, average='macro').to(device)
+        self.f1_score = F1Score(task="binary",num_classes=2, average='macro').to(device)
+        self.precision = Precision(task="binary",num_classes=2, average='macro').to(device)
+        self.recall = Recall(task="binary",num_classes=2, average='macro').to(device)
 
     def update_metrics(self, preds, targets):
         """
