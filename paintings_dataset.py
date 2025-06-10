@@ -110,7 +110,7 @@ class PaintingsDataset(Dataset):
                 output['transformed_image'] = torch.nn.functional.interpolate(output['transformed_image'].unsqueeze(0), 
                                                                               size=(self.image_input_size, self.image_input_size), 
                                                                               mode='bilinear').squeeze(0)
-                output['transformed_image'] = output['transformed_image'].float()   / 255.0   
+            output['transformed_image'] = output['transformed_image'].float() / 255.0
 
         # Add the padding
         # If the image is too big we just resize using nearest neighbor
@@ -128,11 +128,16 @@ class PaintingsDataset(Dataset):
         if self.padding == 'zero':
             padder = torch.nn.ZeroPad2d(padding_tuple)
         elif self.padding == 'mirror':
-            padder = torch.nn.ReflectionPad2d(padding_tuple)
+                padder = torch.nn.ReflectionPad2d(padding_tuple)                
         elif self.padding == 'replicate':
-            padder = torch.nn.ReplicationPad2d(padding_tuple) 
-        
-        output['image'] = padder(output['image'])
+                padder = torch.nn.ReplicationPad2d(padding_tuple) 
+        try:
+            output['image'] = padder(output['image'])
+        except RuntimeError as e:
+            C, imh, imw = output['image'].shape 
+            output['image'] = torch.nn.functional.interpolate(output['image'].unsqueeze(0), 
+                                                                size=(max(imh, int(self.image_input_size / 2 + 1)), max(imw, int(self.image_input_size/2 + 1))), 
+                                                                mode='nearest').squeeze(0).clone()
         output['image'] = output['image'].float() / 255.0  # Normalize the image to [0, 1]
         return output
 
@@ -162,3 +167,8 @@ if __name__ == "__main__":
     plt.imshow(sample['transformed_image'].permute(1, 2, 0))  # Permute to (H, W, C) for plotting
     plt.show()
     print("Transformed image size:", sample['transformed_image'].shape)
+#%%
+    print(sample['image'].dtype)
+    print(sample['transformed_image'].dtype)
+    print(torch.max(sample['image']))
+    print(torch.max(sample['transformed_image']))
