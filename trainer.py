@@ -1,6 +1,6 @@
 #%%
 import torch
-from typing import Literal
+from typing import Literal, Tuple
 
 import tqdm
 
@@ -42,6 +42,7 @@ class Trainer:
                     use_fp16: bool = True, # To train the model in half precision
                     data_path: str = "data",
                     padding: PaddingOptions = PaddingOptions.ZERO,
+                    weighted_loss: torch.Tensor = torch.Tensor([0.7, 0.3]),
                 ):
         # Model
         self.model_name = model
@@ -58,7 +59,7 @@ class Trainer:
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.loss_function = loss_function()
+        self.loss_function = loss_function(weight=weighted_loss.to(device))
         self.optimizer = optimizer(self.model_instance.parameters(), lr=learning_rate)
         self.save_model_path = save_model_path
         self.validation_split = validation_split
@@ -139,7 +140,6 @@ class Trainer:
                 self.train_metric_manager.update_metrics(outputs.argmax(dim=1), labels)
             metric_dict = self.train_metric_manager.compute_metrics()
             if (epochs) % self.logging_interval == 0:
-                continue
                 print(f"Epoch [{epochs + 1}/{self.epochs}], Step [{epochs + 1}/{len(self.train_dataloader)}], Loss: {running_loss / self.logging_interval:.4f}")
                 running_loss = 0.0
                 val_loss, val_dict = self.validate()
@@ -150,7 +150,9 @@ class Trainer:
                 if val_loss  < self.best_loss:
                     torch.save(self.model_instance.state_dict(), self.save_model_path+"best_loss_model.pth")
                     print(f"Model saved to {self.save_model_path}, best loss: {val_loss:.4f}")
-                    
+                print("The validation scores are:")
+                print(val_dict)
+                print(val_loss)
                 # update metrics
 
         return metric_dict 
@@ -161,9 +163,9 @@ class Trainer:
         running_loss = 0.0
         for img_dict in self.val_dataloader:
             if self.model_name == "two_branch_resnet":
-                images = img_dict['image']
-                labels = img_dict['label']
-                image_transformed = img_dict['transformed_image']
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+                image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
             else:
@@ -183,9 +185,9 @@ class Trainer:
         running_loss = 0.0
         for img_dict in self.test_dataloader:
             if self.model_name == "two_branch_resnet":
-                images = img_dict['image']
-                labels = img_dict['label']
-                image_transformed = img_dict['transformed_image']
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+                image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
             else:
@@ -203,8 +205,8 @@ if __name__=="__main__":
     print("Starting training...")
     trainer = Trainer(
         model="two_branch_resnet", 
-        epochs=10, 
-        batch_size=32, 
+        epochs=50, 
+        batch_size=64, 
         freeze_layers=0.8, 
         learning_rate=0.001, 
         loss_function=CrossEntropyLoss, 
@@ -212,8 +214,8 @@ if __name__=="__main__":
         save_model_path="weights/",
         validation_split=0.2,
         test_split=0.2,
-        logging_interval=1,
-        num_workers=4,
+        logging_interval=10,
+        num_workers=8,
         input_size=224,
         augmentation=True,
         use_fp16=True,
