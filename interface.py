@@ -15,6 +15,8 @@ from profiler import Profiler
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.manual_seed(2025)
+torch.cuda.manual_seed(2025)
 
 class TrainTestVal(str, Enum):
     TRAIN = 'train'
@@ -23,7 +25,7 @@ class TrainTestVal(str, Enum):
     ALL = 'all'
 
 
-class Trainer:
+class Interface:
     """
     This is the Trainer class that will be used to train the models.
     It will handle the training loop, validation, and testing of the models.
@@ -124,7 +126,7 @@ class Trainer:
         """
         self.model_instance.train()
         # for epochs, img_dict in enumerate(tqdm.tqdm(range(self.epochs), desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: {self.train_metric_manager.compute_metrics()}")):
-        metric_dict = {}
+        metric_dict = {"f1_score":0, "accuracy": 0}
         for epochs in range(self.epochs):
             self.train_metric_manager.reset_metrics()
             running_loss = 0.0
@@ -157,7 +159,7 @@ class Trainer:
             metric_dict = self.train_metric_manager.compute_metrics()
             if (epochs) % self.logging_interval == 0:
                 print(f"Epoch [{epochs + 1}/{self.epochs}], Step [{epochs + 1}/{len(self.train_dataloader)}], Loss: {running_loss / self.logging_interval:.4f}")
-                self.profiler.log_metric(running_loss / epochs, metric_name="Train Loss", step=epochs)
+                self.profiler.log_metric(running_loss, metric_name="Train Loss", step=epochs)
                 self.profiler.log_metric(metric_dict["f1_score"], metric_name="Train F1 Score", step=epochs)
                 self.profiler.log_metric(metric_dict["accuracy"], metric_name="Train Accuracy", step=epochs)
                 running_loss = 0.0
@@ -213,11 +215,11 @@ class Trainer:
 
 
     def test(self):
-        """"
+        """
         Test rutine for the model.
         This method will evaluate the model on the test dataset and return the loss and metrics
         dictionary.
-        """"
+        """
         self.model_instance.eval()
         self.test_metric_manager.reset_metrics()
         running_loss = 0.0
@@ -285,7 +287,7 @@ class Trainer:
 
 if __name__=="__main__":
     print("Starting training...")
-    trainer = Trainer(
+    trainer = Interface(
         model="two_branch_resnet", 
         epochs=50, 
         batch_size=64, 
@@ -296,7 +298,7 @@ if __name__=="__main__":
         save_model_path="weights/",
         validation_split=0.2,
         test_split=0.2,
-        logging_interval=10,
+        logging_interval=5,
         num_workers=8,
         input_size=224,
         augmentation=True,
