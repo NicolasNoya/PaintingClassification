@@ -1,21 +1,31 @@
 #%%
 import torch
-from typing import Literal, Tuple
+from typing import Literal
+from enum import Enum
 
 import tqdm
 
 from torch.utils.data import DataLoader
-from torch.optim import Adam, SGD
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.optim import Adam
+from torch.nn import CrossEntropyLoss
 
 from metric_manager import MetricManager
 from paintings_dataset import PaintingsDataset, PaddingOptions
+from profiler import Profiler
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.manual_seed(2025)
+torch.cuda.manual_seed(2025)
+
+class TrainTestVal(str, Enum):
+    TRAIN = 'train'
+    TEST = 'test'
+    VAL = 'val'
+    ALL = 'all'
 
 
-class Trainer:
+class Interface:
     """
     This is the Trainer class that will be used to train the models.
     It will handle the training loop, validation, and testing of the models.
@@ -43,7 +53,11 @@ class Trainer:
                     data_path: str = "data",
                     padding: PaddingOptions = PaddingOptions.ZERO,
                     weighted_loss: torch.Tensor = torch.Tensor([0.7, 0.3]),
+                    profiling_path: str = "log_dir/",
                 ):
+        # Profiler
+        self.profiler = Profiler(log_dir=profiling_path)
+
         # Model
         self.model_name = model
         self.freeze_layers = freeze_layers
@@ -106,14 +120,18 @@ class Trainer:
 
 
     def rnn_train(self):
+        """
+        Training rutine for the model RNN.
+        This method will train the model on the training dataset and validate it on the validation dataset. 
+        """
         self.model_instance.train()
         # for epochs, img_dict in enumerate(tqdm.tqdm(range(self.epochs), desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: {self.train_metric_manager.compute_metrics()}")):
-        metric_dict = {}
+        metric_dict = {"f1_score":0, "accuracy": 0}
         for epochs in range(self.epochs):
             self.train_metric_manager.reset_metrics()
             running_loss = 0.0
             # for img_dict in self.train_dataloader:
-            for i, img_dict in enumerate(tqdm.tqdm(self.train_dataloader, desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: {metric_dict}")):
+            for i, img_dict in enumerate(tqdm.tqdm(self.train_dataloader, desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: f1 score: {metric_dict['f1_score']}, accuracy: {metric_dict['accuracy']}")):
                 if self.model_name == "two_branch_resnet":
                     images = img_dict['image'].to(device)
                     images = (images/images.max()).float()  # Normalize the images
@@ -141,8 +159,14 @@ class Trainer:
             metric_dict = self.train_metric_manager.compute_metrics()
             if (epochs) % self.logging_interval == 0:
                 print(f"Epoch [{epochs + 1}/{self.epochs}], Step [{epochs + 1}/{len(self.train_dataloader)}], Loss: {running_loss / self.logging_interval:.4f}")
+                self.profiler.log_metric(running_loss, metric_name="Train Loss", step=epochs)
+                self.profiler.log_metric(metric_dict["f1_score"], metric_name="Train F1 Score", step=epochs)
+                self.profiler.log_metric(metric_dict["accuracy"], metric_name="Train Accuracy", step=epochs)
                 running_loss = 0.0
                 val_loss, val_dict = self.validate()
+                self.profiler.log_metric(val_loss, metric_name="Val Loss", step=epochs)
+                self.profiler.log_metric(val_dict["f1_score"], metric_name="Val F1 Score", step=epochs)
+                self.profiler.log_metric(val_dict["accuracy"], metric_name="Val Accuracy", step=epochs)
                 # Check the f1 score to save and the loss 
                 if val_dict["f1_score"] > self.best_f1_score:
                     torch.save(self.model_instance.state_dict(), self.save_model_path+f"best_f1_model{val_dict['f1_score']:.4f}.pth")
@@ -156,10 +180,18 @@ class Trainer:
                 print(val_dict)
                 print(val_loss)
                 # update metrics
-
+        # Get the final confusion matrix
+        val_metric_dict = self.val_metric_manager.compute_metrics()
+        self.profiler.check_confusion_matrix(val_metric_dict["confusion_matrix"])
         return metric_dict 
     
+
     def validate(self):
+        """
+        Validate rutine for the model.
+        This method will evaluate the model on the validation dataset and return the loss and metrics
+        dictionary.
+        """
         self.model_instance.eval()
         self.val_metric_manager.reset_metrics()
         running_loss = 0.0
@@ -181,7 +213,13 @@ class Trainer:
 
         return running_loss, metric_dict 
 
+
     def test(self):
+        """
+        Test rutine for the model.
+        This method will evaluate the model on the test dataset and return the loss and metrics
+        dictionary.
+        """
         self.model_instance.eval()
         self.test_metric_manager.reset_metrics()
         running_loss = 0.0
@@ -202,10 +240,54 @@ class Trainer:
         metric_dict = self.test_metric_manager.compute_metrics()
 
         return running_loss, metric_dict 
+    
+
+    def project_embeddings(self, dset: TrainTestVal = TrainTestVal.TRAIN):
+        """
+        This method logs the embeddings of the images into the TensorBoard projector.
+        This will help visualize the embeddings in a 3D space and unreveal hidden patterns
+        of the data.
+        Args:
+            embedding_tensor (torch.Tensor or numpy.ndarray): The tensor containing the embeddings.
+            labels (torch.Tensor or numpy.ndarray): The labels corresponding to the embeddings.
+        """
+        if dset == TrainTestVal.TRAIN:
+            dataloader = self.train_dataloader
+        elif dset == TrainTestVal.VAL:
+            dataloader = self.val_dataloader
+        elif dset == TrainTestVal.TEST:
+            dataloader = self.test_dataloader
+        elif dset == TrainTestVal.ALL:
+            dataloader = DataLoader(
+                self.dataset, 
+                batch_size=self.batch_size, 
+                shuffle=False, 
+                num_workers=self.num_workers
+            )
+        else:
+            raise ValueError("Invalid dataset type. Use TrainTestVal.TRAIN, TrainTestVal.VAL, or TrainTestVal.TEST.")
+        
+        embedding_tensor = []
+        labels = []
+        for img_dict in dataloader:
+            if self.model_name == "two_branch_resnet":
+                images = img_dict['image'].to(device)
+                image_transformed = img_dict['transformed_image'].to(device)
+                labels.extend(img_dict['label'].tolist())
+                # Forward pass
+                outputs = self.model_instance(images, image_transformed)
+            else:
+                raise ValueError("Unsupported model type for training")
+            
+            embedding_tensor.append(outputs.detach().cpu().numpy())
+        embedding_tensor = torch.tensor(embedding_tensor).view(-1, outputs.size(-1))
+        labels = torch.tensor(labels)
+        self.profiler.embeddings_projector(embedding_tensor, labels)
+
 
 if __name__=="__main__":
     print("Starting training...")
-    trainer = Trainer(
+    trainer = Interface(
         model="two_branch_resnet", 
         epochs=50, 
         batch_size=64, 
@@ -216,7 +298,7 @@ if __name__=="__main__":
         save_model_path="weights/",
         validation_split=0.2,
         test_split=0.2,
-        logging_interval=10,
+        logging_interval=5,
         num_workers=8,
         input_size=224,
         augmentation=True,

@@ -1,6 +1,8 @@
 
 import torch
 from torchmetrics.classification import Accuracy, F1Score, Precision, Recall
+from torchmetrics import ConfusionMatrix
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class MetricManager:
@@ -16,6 +18,7 @@ class MetricManager:
         self.f1_score = F1Score(task="binary",num_classes=2, average='macro').to(device)
         self.precision = Precision(task="binary",num_classes=2, average='macro').to(device)
         self.recall = Recall(task="binary",num_classes=2, average='macro').to(device)
+        self.confussion_matrix = ConfusionMatrix(task="binary").to(device)
 
     def update_metrics(self, preds, targets):
         """
@@ -30,6 +33,7 @@ class MetricManager:
         self.f1_score.update(preds, targets)
         self.precision.update(preds, targets)
         self.recall.update(preds, targets)
+        self.confussion_matrix.update(preds, targets)
 
     def compute_metrics(self):
         """
@@ -41,7 +45,8 @@ class MetricManager:
             "accuracy": self.accuracy.compute().item(),
             "f1_score": self.f1_score.compute().item(),
             "precision": self.precision.compute().item(),
-            "recall": self.recall.compute().item()
+            "recall": self.recall.compute().item(),
+            "confusion_matrix": self.confussion_matrix.compute().cpu().numpy()
         }
     
     def reset_metrics(self):
@@ -53,3 +58,4 @@ class MetricManager:
         self.f1_score.reset()
         self.precision.reset()
         self.recall.reset()
+        self.confussion_matrix.reset()
