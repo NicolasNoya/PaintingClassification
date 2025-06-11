@@ -1,9 +1,19 @@
+# Put the data into the data directory
 data
+
+# Ignore Python bytecode files
 .pychache
 __pycache__
+
+# Environments
 .venv
 venv
 env
 Dataset
 checkpoints
+
+# weights and logs
 weights
+log_dir
+logs
+
