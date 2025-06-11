@@ -41,7 +41,7 @@ class Profiler:
             labels = torch.tensor(labels)
 
         # Check if embedding_tensor and labels have the same number of samples
-        if embedding_tensor.size[0] != labels.size[0]:
+        if embedding_tensor.size()[0] != labels.size()[0]:
             raise ValueError("Embedding tensor and labels must have the same number of samples.")
 
         # Log embeddings
