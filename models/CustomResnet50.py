@@ -57,92 +57,13 @@ class CustomResNet50(torch.nn.Module):
         in_features = self.model.fc.in_features
         self.model.fc = torch.nn.Linear(in_features=in_features, out_features=n_classes)
 
+        for name, param in self.model.named_parameters():
+            if name.startswith("layer4") or name.startswith("fc"):
+                param.requires_grad = True
+
         self.device = device
         self.save_path = save_path
         self.model.to(self.device)
 
     def forward(self, x):
         return self.model(x)
-
-    def train_model(self, data_loader, optimizer, criterion, device=None):
-        if device is None:
-            device = self.device
-
-        self.model.train()
-        cumulative_loss = 0.0
-        cumulative_correct = 0
-        total_samples = 0
-
-        for inputs, targets in tqdm(data_loader, desc="Training", leave=False):
-            inputs = inputs.to(device)
-            targets = targets.to(device)
-
-            optimizer.zero_grad()
-            y_pred = self.model(inputs)
-            loss = criterion(y_pred, targets)
-            loss.backward()
-            optimizer.step()
-
-            batch_size = inputs.size(0)
-            cumulative_loss += loss.item() * batch_size
-            total_samples += batch_size
-            _, predicted = y_pred.max(1)
-            cumulative_correct += predicted.eq(targets).sum().item()
-
-        avg_loss = cumulative_loss / total_samples
-        avg_accuracy = 100.0 * (cumulative_correct / total_samples)
-        return avg_loss, avg_accuracy
-
-    def test_model(self, data_loader, criterion, device=None):
-        if device is None:
-            device = self.device
-
-        self.model.eval()
-        cumulative_loss = 0.0
-        cumulative_correct = 0
-        total_samples = 0
-
-        with torch.no_grad():
-            for inputs, targets in data_loader:
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-
-                y_pred = self.model(inputs)
-                loss = criterion(y_pred, targets)
-
-                batch_size = inputs.size(0)
-                cumulative_loss += loss.item() * batch_size
-                total_samples += batch_size
-                _, predicted = y_pred.max(1)
-                cumulative_correct += predicted.eq(targets).sum().item()
-
-        avg_loss = cumulative_loss / total_samples
-        avg_accuracy = 100.0 * (cumulative_correct / total_samples)
-        return avg_loss, avg_accuracy
-
-    def save_checkpoint(self):
-        torch.save(self.model.state_dict(), self.save_path)
-
-    def load_checkpoint(self):
-        state_dict = torch.load(self.save_path)
-        self.model.load_state_dict(state_dict)
-
-    def fit(self, train_loader, val_loader, criterion, optimizer, n_epochs, scheduler=None):
-        best_val_loss = float('inf')
-
-        for epoch in range(1, n_epochs + 1):
-            train_loss, train_acc = self.train_model(train_loader, optimizer, criterion, self.device)
-            val_loss, val_acc     = self.test_model(val_loader,     criterion, self.device)
-
-            print(f"Epoch {epoch}/{n_epochs} — "
-                  f"Train loss: {train_loss:.4f}, Train acc: {train_acc:.2f}% | "
-                  f"Val loss: {val_loss:.4f}, Val acc: {val_acc:.2f}%")
-
-            #this is if we use scheduler (to change the lr)
-            if scheduler is not None:
-                scheduler.step()
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                self.save_checkpoint()
-                print(f"  Saved best model (val_loss = {val_loss:.4f})")
