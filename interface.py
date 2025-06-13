@@ -35,7 +35,7 @@ class Interface:
     """
     def __init__(
                     self, 
-                    model: Literal["two_branch_resnet"], 
+                    model: Literal["two_branch_resnet",'resnet50'], 
                     epochs: int = 10, 
                     batch_size: int = 32,   
                     freeze_layers: float = 0.8, 
@@ -52,7 +52,7 @@ class Interface:
                     use_fp16: bool = True, # To train the model in half precision
                     data_path: str = "data",
                     padding: PaddingOptions = PaddingOptions.ZERO,
-                    weighted_loss: torch.Tensor = torch.Tensor([0.7, 0.3]),
+                    weighted_loss: torch.Tensor = torch.Tensor([0.3, 0.7]),
                     profiling_path: str = "log_dir/",
                 ):
         # Profiler
@@ -66,6 +66,10 @@ class Interface:
             from models.two_branch_rnn import TwoBranchRNN
             self.model_instance = TwoBranchRNN(freeze_layers=freeze_layers).to(device)
             self.transform = True
+        elif self.model_name == 'resnet50':
+            from models.CustomResnet50 import CustomResNet50
+            self.model_instance = CustomResNet50(device=device,save_path=save_model_path,n_classes=2).to(device)
+            self.transform = False
         else:
             raise ValueError("Unsupported model type")
         
@@ -114,7 +118,7 @@ class Interface:
             val_train_dataset, 
             [len_train, len_val],
         )
-        self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
         self.val_dataloader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
         self.test_dataloader = DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
 
@@ -141,6 +145,13 @@ class Interface:
                     # Forward pass
                     outputs = self.model_instance(images, image_transformed)
                     # outputs = self.model_instance(images, images)
+                elif self.model_name == "resnet50":
+                    images = img_dict['image'].to(device)
+                    labels = img_dict['label'].to(device)
+
+                    # Forward pass
+                    outputs = self.model_instance(images)
+                
                 else:
                     raise ValueError("Unsupported model type for training")
                 
@@ -157,8 +168,8 @@ class Interface:
                 
                 self.train_metric_manager.update_metrics(outputs.argmax(dim=1), labels)
             metric_dict = self.train_metric_manager.compute_metrics()
-            if (epochs) % self.logging_interval == 0:
-                print(f"Epoch [{epochs + 1}/{self.epochs}], Step [{epochs + 1}/{len(self.train_dataloader)}], Loss: {running_loss / self.logging_interval:.4f}")
+            if (epochs) % self.logging_interval == 0 or (epochs+1) == self.epochs:
+                print(f"Epoch [{epochs + 1}/{self.epochs}], Loss: {running_loss / self.logging_interval:.4f}")
                 self.profiler.log_metric(running_loss, metric_name="Train Loss", step=epochs)
                 self.profiler.log_metric(metric_dict["f1_score"], metric_name="Train F1 Score", step=epochs)
                 self.profiler.log_metric(metric_dict["accuracy"], metric_name="Train Accuracy", step=epochs)
@@ -202,6 +213,11 @@ class Interface:
                 image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
+            elif self.model_name == 'resnet50':
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+                # Forward pass
+                outputs = self.model_instance(images)
             else:
                 raise ValueError("Unsupported model type for training")
             
@@ -230,6 +246,11 @@ class Interface:
                 image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
+            elif self.model_name == 'resnet50':
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+                # Forward pass
+                outputs = self.model_instance(images)
             else:
                 raise ValueError("Unsupported model type for training")
             
@@ -276,6 +297,11 @@ class Interface:
                 labels.extend(img_dict['label'].tolist())
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
+            elif self.model_name == 'resnet50':
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+                # Forward pass
+                outputs = self.model_instance(images)
             else:
                 raise ValueError("Unsupported model type for training")
             
