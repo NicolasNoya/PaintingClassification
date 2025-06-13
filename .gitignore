@@ -9,11 +9,8 @@ __pycache__
 .venv
 venv
 env
-Dataset
-checkpoints
 
 # weights and logs
 weights
 log_dir
 logs
-
