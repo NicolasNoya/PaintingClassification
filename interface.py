@@ -52,8 +52,10 @@ class Interface:
                     use_fp16: bool = True, # To train the model in half precision
                     data_path: str = "data",
                     padding: PaddingOptions = PaddingOptions.ZERO,
-                    weighted_loss: torch.Tensor = torch.Tensor([0.3, 0.7]),
+                    weighted_loss: torch.Tensor = None,
                     profiling_path: str = "log_dir/",
+                    custom_augment_figuratif=None,
+                    custom_augment_abstrait=None,
                 ):
         # Profiler
         self.profiler = Profiler(log_dir=profiling_path)
@@ -77,7 +79,6 @@ class Interface:
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.loss_function = loss_function(weight=weighted_loss.to(device))
         self.optimizer = optimizer(self.model_instance.parameters(), lr=learning_rate)
         self.save_model_path = save_model_path
         self.validation_split = validation_split
@@ -106,7 +107,9 @@ class Interface:
                                         augment=self.augmentation, 
                                         transform=self.transform, 
                                         padding=self.padding, 
-                                        image_input_size=self.input_size)
+                                        image_input_size=self.input_size,
+                                        custom_augment_abstrait=custom_augment_abstrait,
+                                        custom_augment_figuratif=custom_augment_figuratif)
         len_test = int(len(self.dataset) * self.test_split)
         len_train = int(len(self.dataset) * (1 - self.validation_split - self.test_split))
         len_val = len(self.dataset) - len_train - len_test
@@ -121,6 +124,22 @@ class Interface:
         self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
         self.val_dataloader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
         self.test_dataloader = DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+
+        n_figurative = self.dataset.len_figurative
+        n_abstract = self.dataset.len_abstract
+        total = n_figurative + n_abstract
+
+        class_weights = torch.tensor([
+            total / n_figurative,  
+            total / n_abstract    
+        ], dtype=torch.float32).to(device)
+
+        if weighted_loss is None or len(weighted_loss) != 2:
+            weighted_loss = class_weights
+
+        self.loss_function = loss_function(weight=weighted_loss.to(device))
+
+
 
 
     def rnn_train(self):
@@ -236,6 +255,11 @@ class Interface:
         This method will evaluate the model on the test dataset and return the loss and metrics
         dictionary.
         """
+        correct_abstract = []
+        wrong_abstract = []
+        correct_figurative = []
+        wrong_figurative = []
+
         self.model_instance.eval()
         self.test_metric_manager.reset_metrics()
         running_loss = 0.0
@@ -258,9 +282,27 @@ class Interface:
             running_loss += loss.item()
             self.test_metric_manager.update_metrics(outputs.argmax(dim=1), labels)
 
+            preds = outputs.argmax(dim=1)
+
+            for i in range(len(labels)):
+                label = labels[i].item()
+                pred = preds[i].item()
+                img = images[i].cpu()
+
+                if label == 1 and pred == 1 and len(correct_abstract) < 5:
+                    correct_abstract.append((img, label, pred))
+                elif label == 1 and pred == 0 and len(wrong_abstract) < 5:
+                    wrong_abstract.append((img, label, pred))
+                elif label == 0 and pred == 0 and len(correct_figurative) < 5:
+                    correct_figurative.append((img, label, pred))
+                elif label == 0 and pred == 1 and len(wrong_figurative) < 5:
+                    wrong_figurative.append((img, label, pred))
+
+            
+
         metric_dict = self.test_metric_manager.compute_metrics()
 
-        return running_loss, metric_dict 
+        return running_loss, metric_dict, [correct_abstract,wrong_abstract,correct_figurative,wrong_figurative]
     
 
     def project_embeddings(self, dset: TrainTestVal = TrainTestVal.TRAIN):
