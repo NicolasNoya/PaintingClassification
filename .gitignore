@@ -14,3 +14,6 @@ env
 weights
 log_dir
 logs
+
+# tests
+2025*
