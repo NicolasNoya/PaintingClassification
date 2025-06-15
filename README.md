@@ -10,14 +10,14 @@ This project uses Poetry for dependency management. All required libraries will 
 
 To ensure modularity and atomicity, the project follows this folder and class structure:
 
-    Metrics Management: A class is responsible for computing and storing evaluation metrics.
+- Metrics Management: A class is responsible for computing and storing evaluation metrics.
 
-    Interfaces: A class handles training, validation, and testing interfaces for every model created.
+- Interfaces: A class handles training, validation, and testing interfaces for every model created.
 
-    Data Management: A class is responsible for data handling, including data loading, augmentation, and transformations.
+- Data Management: A class is responsible for data handling, including data loading, augmentation, and transformations.
 
-    Models: A folder containing all model definitions.
+- Models: A folder containing all model definitions.
 
-    Profiling and Analysis: A class used for profiling during training and for data analysis.
+- Profiling and Analysis: A class used for profiling during training and for data analysis.
 
-    Research: A folder dedicated to experimental or preliminary code. This is not intended for production use and is generally not recommended for reference.
+- Research: A folder dedicated to experimental or preliminary code. This is not intended for production use and is generally not recommended for reference.
