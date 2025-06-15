@@ -54,6 +54,12 @@ class TwoBranchRNN(torch.nn.Module):
         output = self.fc(combined_features)
         return output
     
+    def get_embeddings(self, full_image, patch):
+        full_image_features = self.full_image_resnet(full_image)
+        patch_features = self.patch_resnet(patch)
+        combined_features = torch.cat((full_image_features, patch_features), dim=1)
+        return combined_features
+    
     
 
 

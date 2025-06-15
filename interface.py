@@ -2,6 +2,7 @@
 import torch
 from typing import Literal
 from enum import Enum
+import numpy as np
 
 import tqdm
 
@@ -18,11 +19,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(2025)
 torch.cuda.manual_seed(2025)
 
+# Put here waht dataset to use for the embedding projection.
 class TrainTestVal(str, Enum):
     TRAIN = 'train'
     TEST = 'test'
     VAL = 'val'
     ALL = 'all'
+
+# Put here the name of the models.
+class ModelsName(str, Enum):
+    TWO_RESNET = 'two_branch_resnet'
+    RESNET = 'resnet50'
 
 
 class Interface:
@@ -35,7 +42,7 @@ class Interface:
     """
     def __init__(
                     self, 
-                    model: Literal["two_branch_resnet",'resnet50'], 
+                    model: ModelsName.TWO_RESNET, 
                     epochs: int = 10, 
                     batch_size: int = 32,   
                     freeze_layers: float = 0.8, 
@@ -54,6 +61,7 @@ class Interface:
                     padding: PaddingOptions = PaddingOptions.ZERO,
                     weighted_loss: torch.Tensor = None,
                     profiling_path: str = "log_dir/",
+                    load_model_path: str = None,
                     custom_augment_figuratif=None,
                     custom_augment_abstrait=None,
                 ):
@@ -64,11 +72,13 @@ class Interface:
         self.model_name = model
         self.freeze_layers = freeze_layers
         self.transform = False
-        if self.model_name == "two_branch_resnet":
+        if self.model_name == ModelsName.TWO_RESNET:
             from models.two_branch_rnn import TwoBranchRNN
             self.model_instance = TwoBranchRNN(freeze_layers=freeze_layers).to(device)
+            if load_model_path:
+                self.model_instance.load_state_dict(torch.load(load_model_path))
             self.transform = True
-        elif self.model_name == 'resnet50':
+        elif self.model_name == ModelsName.RESNET:
             from models.CustomResnet50 import CustomResNet50
             self.model_instance = CustomResNet50(device=device,save_path=save_model_path,n_classes=2).to(device)
             self.transform = False
@@ -155,7 +165,7 @@ class Interface:
             running_loss = 0.0
             # for img_dict in self.train_dataloader:
             for i, img_dict in enumerate(tqdm.tqdm(self.train_dataloader, desc=f"Training Epoch {epochs + 1}/{self.epochs} - Metrics: f1 score: {metric_dict['f1_score']}, accuracy: {metric_dict['accuracy']}")):
-                if self.model_name == "two_branch_resnet":
+                if self.model_name == ModelsName.TWO_RESNET:
                     images = img_dict['image'].to(device)
                     images = (images/images.max()).float()  # Normalize the images
                     labels = img_dict['label'].to(device)
@@ -164,7 +174,7 @@ class Interface:
                     # Forward pass
                     outputs = self.model_instance(images, image_transformed)
                     # outputs = self.model_instance(images, images)
-                elif self.model_name == "resnet50":
+                elif self.model_name == ModelsName.RESNET:
                     images = img_dict['image'].to(device)
                     labels = img_dict['label'].to(device)
 
@@ -226,13 +236,13 @@ class Interface:
         self.val_metric_manager.reset_metrics()
         running_loss = 0.0
         for img_dict in self.val_dataloader:
-            if self.model_name == "two_branch_resnet":
+            if self.model_name == ModelsName.TWO_RESNET:
                 images = img_dict['image'].to(device)
                 labels = img_dict['label'].to(device)
                 image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
-            elif self.model_name == 'resnet50':
+            elif self.model_name == ModelsName.RESNET:
                 images = img_dict['image'].to(device)
                 labels = img_dict['label'].to(device)
                 # Forward pass
@@ -264,13 +274,13 @@ class Interface:
         self.test_metric_manager.reset_metrics()
         running_loss = 0.0
         for img_dict in self.test_dataloader:
-            if self.model_name == "two_branch_resnet":
+            if self.model_name == ModelsName.TWO_RESNET:
                 images = img_dict['image'].to(device)
                 labels = img_dict['label'].to(device)
                 image_transformed = img_dict['transformed_image'].to(device)
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
-            elif self.model_name == 'resnet50':
+            elif self.model_name == ModelsName.RESNET:
                 images = img_dict['image'].to(device)
                 labels = img_dict['label'].to(device)
                 # Forward pass
@@ -333,13 +343,14 @@ class Interface:
         embedding_tensor = []
         labels = []
         for img_dict in dataloader:
-            if self.model_name == "two_branch_resnet":
+            if self.model_name == ModelsName.TWO_RESNET:
                 images = img_dict['image'].to(device)
                 image_transformed = img_dict['transformed_image'].to(device)
                 labels.extend(img_dict['label'].tolist())
                 # Forward pass
                 outputs = self.model_instance(images, image_transformed)
-            elif self.model_name == 'resnet50':
+                embedding = self.model_instance.get_embeddings(images, image_transformed)
+            elif self.model_name == ModelsName.RESNET:
                 images = img_dict['image'].to(device)
                 labels = img_dict['label'].to(device)
                 # Forward pass
@@ -347,8 +358,12 @@ class Interface:
             else:
                 raise ValueError("Unsupported model type for training")
             
-            embedding_tensor.append(outputs.detach().cpu().numpy())
-        embedding_tensor = torch.tensor(embedding_tensor).view(-1, outputs.size(-1))
+            list_of_arrays = [embedding.detach().cpu().numpy()[i] for i in range(embedding.shape[0])]
+            embedding_tensor+= list_of_arrays
+            # print("The shape of the embedding is", embedding.shape)
+        # embedding_tensor = np.array(embedding_tensor)
+        # print("The shape of the tensor is: ", embedding_tensor.shape)
+        embedding_tensor = torch.tensor(embedding_tensor).view(-1, embedding.size(-1))
         labels = torch.tensor(labels)
         self.profiler.embeddings_projector(embedding_tensor, labels)
 
@@ -356,7 +371,7 @@ class Interface:
 if __name__=="__main__":
     print("Starting training...")
     trainer = Interface(
-        model="two_branch_resnet", 
+        model= ModelsName.TWO_RESNET, 
         epochs=50, 
         batch_size=64, 
         freeze_layers=0.8, 
@@ -372,7 +387,11 @@ if __name__=="__main__":
         augmentation=True,
         use_fp16=True,
         data_path="data",
-        padding=PaddingOptions.ZERO
+        padding=PaddingOptions.ZERO,
+        load_model_path = "./weights/best_f1_model0.7863.pth",
     )
-    train_metrics_dict = trainer.rnn_train()
-    print(f"Training completed. Final metrics: {train_metrics_dict}")
+
+    trainer.project_embeddings(TrainTestVal.TEST)
+
+    # train_metrics_dict = trainer.rnn_train()
+    # print(f"Training completed. Final metrics: {train_metrics_dict}")
