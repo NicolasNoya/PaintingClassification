@@ -89,7 +89,7 @@ class Interface:
         self.epochs = epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.optimizer = optimizer(self.model_instance.parameters(), lr=learning_rate)
+        self.optimizer = optimizer(self.model_instance.parameters(), lr=learning_rate,weight_decay=1e-4)
         self.save_model_path = save_model_path
         self.validation_split = validation_split
         self.test_split = test_split

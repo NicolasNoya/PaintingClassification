@@ -44,15 +44,17 @@ class CustomResNet50(torch.nn.Module):
         Loads the model weights from the specified path.
     """
 
-    def __init__(self, device, save_path, n_classes):
+    def __init__(self, device, save_path, n_classes,freeze_layers=0.8):
         super(CustomResNet50, self).__init__()
 
         self.model = resnet50(weights=ResNet50_Weights.DEFAULT)
 
         #freeze parameters of the model.
         #we freeze everything and we only train last layer so it learns to classify abstrait and figuratif
-        for param in self.model.parameters():
-            param.requires_grad = False
+        params = list(self.model.parameters())
+        k = int(len(params) * freeze_layers)
+        for i, param in enumerate(params):
+            param.requires_grad = (i >= k)
 
         in_features = self.model.fc.in_features
         self.model.fc = torch.nn.Linear(in_features=in_features, out_features=n_classes)
