@@ -10,11 +10,20 @@ from torchvision import transforms
 from typing import Union, Dict, Literal
 from enum import Enum
 
+# default_augment = transforms.Compose([
+#         transforms.RandomHorizontalFlip(),
+#         transforms.RandomVerticalFlip(),
+#         transforms.RandomRotation(10),
+#     ])
+
 default_augment = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.RandomRotation(10),
-    ])
+    transforms.Resize(256),
+    transforms.RandomResizedCrop(224),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Imagenet
+                         std=[0.229, 0.224, 0.225])
+])
 
 # Class for literal padding options
 class PaddingOptions(str, Enum):
@@ -41,12 +50,17 @@ class PaintingsDataset(Dataset):
     If the `transform` parameter is set to True, the dataset will apply transformations to the images and
     return both the transformed image and the non-transformed image.
     
-    In case of `augment` being True, there will be a default augmentation applied to the images or 
-    a custom augmentation can be passed as a parameter named `custom_augment`(if None we will use custom).
+    In case of `augment` being True, the dataset will apply default augmentation to the images, or 
+    a custom augmentation can be passed as parameters:
+      - `custom_augment_figuratif` for figurative images
+      - `custom_augment_abstrait` for abstract images
+    If either of these is None, the default augmentation will be used. 
+
+    
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path, augment= False, transform=False, custom_augment=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224):
+    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224):
 
         # Path to the data directory
         self.data_path = data_path
@@ -67,7 +81,8 @@ class PaintingsDataset(Dataset):
         # Augmentation and transformation parameters
         self.augment = augment
         self.transform = transform
-        self.augmentation = (custom_augment if custom_augment is not None else default_augment)
+        self.augmentation_figuratif = (custom_augment_figuratif if custom_augment_figuratif is not None else default_augment)
+        self.augmentation_abstrait = (custom_augment_abstrait if custom_augment_abstrait is not None else default_augment)
 
         # Padding configuration
         if padding not in ['zero', 'mirror', 'replicate']:
@@ -99,8 +114,12 @@ class PaintingsDataset(Dataset):
         output['label'] = label
 
         C, H, W = output['image'].shape
-        if self.augment:
-            output['image'] = self.augmentation(output['image']) 
+        if self.augment: #figuratif
+            if label == 0: 
+                output['image'] = self.augmentation_figuratif(output['image']) 
+            else:
+                output['image'] = self.augmentation_abstrait(output['image']) 
+
         if self.transform:
             transform_size = min(min(H, W) * 0.3, self.image_input_size)
             default_transform = transforms.CenterCrop(transform_size)
