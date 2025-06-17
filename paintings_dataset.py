@@ -39,8 +39,8 @@ class PaintingsDataset(Dataset):
     
     ###############################################################################
     IMPORTANT: The directory structure should be as follows:
-    - abstrait-v2 (where the abstract paintings are stored)
-    - figuratif - aleat (where the figurative paintings are stored)
+    - abstrait (where the abstract paintings are stored)
+    - figuratif (where the figurative paintings are stored)
     ###############################################################################
 
     The dataset will return a list with the images and their corresponding labels.
@@ -60,7 +60,7 @@ class PaintingsDataset(Dataset):
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False):
+    def __init__(self, data_path='new_data/', augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False):
 
         # Path to the data directory
         self.data_path = data_path
