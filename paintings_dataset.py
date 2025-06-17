@@ -9,6 +9,11 @@ from torchvision.io import read_image
 from torchvision import transforms
 from typing import Union, Dict, Literal
 from enum import Enum
+import random
+
+from transformations.transformations import SkewTransform,RandomStretch
+
+
 
 # default_augment = transforms.Compose([
 #         transforms.RandomHorizontalFlip(),
@@ -24,6 +29,16 @@ default_augment = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Imagenet
                          std=[0.229, 0.224, 0.225])
 ])
+
+transform_pool = [
+    transforms.RandomHorizontalFlip(p=1.0),
+    transforms.RandomVerticalFlip(p=1.0),
+    RandomStretch("width", (300, 450)),
+    RandomStretch("height", (300, 450)),
+    SkewTransform((0.1, 0.4), "horizontal"),
+    SkewTransform((0.1, 0.4), "vertical"),
+]
+
 
 # Class for literal padding options
 class PaddingOptions(str, Enum):
@@ -60,7 +75,7 @@ class PaintingsDataset(Dataset):
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path='new_data/', augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False):
+    def __init__(self, data_path='new_data/', augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False,n_transforms_augmented=2):
 
         # Path to the data directory
         self.data_path = data_path
@@ -81,8 +96,11 @@ class PaintingsDataset(Dataset):
         # Augmentation and transformation parameters
         self.augment = augment
         self.transform = transform
+
+        default_augment_abstrait = transforms.Compose(random.sample(transform_pool, n_transforms_augmented))
+
         self.augmentation_figuratif = (custom_augment_figuratif if custom_augment_figuratif is not None else default_augment)
-        self.augmentation_abstrait = (custom_augment_abstrait if custom_augment_abstrait is not None else default_augment)
+        self.augmentation_abstrait = (custom_augment_abstrait if custom_augment_abstrait is not None else default_augment_abstrait)
 
         # Padding configuration
         if padding not in ['zero', 'mirror', 'replicate'] and  (padding is not None):

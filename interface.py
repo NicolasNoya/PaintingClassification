@@ -1,9 +1,7 @@
 
 #%%
 import torch
-from typing import Literal
 from enum import Enum
-import numpy as np
 
 import tqdm
 
@@ -15,10 +13,8 @@ from metric_manager import MetricManager
 from paintings_dataset import PaintingsDataset, PaddingOptions
 from profiler import Profiler
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 import torchvision.transforms.functional as F
-
-
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -70,7 +66,8 @@ class Interface:
                     load_model_path: str = None,
                     custom_augment_figuratif=None,
                     custom_augment_abstrait=None,
-                    double_abstract: bool = False
+                    double_abstract: bool = False,
+                    n_transforms_augmented = 2
                 ):
 
         # Profiler
