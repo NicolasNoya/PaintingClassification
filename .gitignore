@@ -1,5 +1,7 @@
 # Put the data into the data directory
 data
+data_abstrait_test
+
 
 # Ignore Python bytecode files
 .pychache
