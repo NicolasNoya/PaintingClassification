@@ -74,6 +74,17 @@ class PaintingsDataset(Dataset):
     
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
+
+    Args:
+        data_path (str): Root directory containing 'abstrait/' and 'figuratif/' subfolders.
+        augment (bool): If True, apply data augmentation to the images.
+        transform (bool): If True, return both the image and a center-cropped transformed version.
+        custom_augment_figuratif (callable): Optional transform for figurative images. Defaults to predefined augmentations.
+        custom_augment_abstrait (callable): Optional transform for abstract images. Defaults to a random composition.
+        padding (PaddingOptions): Padding method to apply when resizing ('zero', 'mirror', 'replicate').
+        image_input_size (int): Final image size after resizing and padding (default: 224).
+        double_abstract (bool): If True, duplicate abstract images to return both original and augmented versions.
+        n_transforms_augmented (int): Number of transforms to randomly sample from the transform pool for abstract augmentation.
     """
     def __init__(self, data_path='new_data/', augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False,n_transforms_augmented=2):
 

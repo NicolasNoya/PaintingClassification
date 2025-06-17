@@ -40,7 +40,30 @@ class Interface:
     It will handle the training loop, validation, and testing of the models.
     It will also import everything needed to train the models, such as the dataset and the model itself.
     Args:
-    # TODO: Add more arguments to the constructor
+        model (ModelsName): Model architecture to use ('two_branch_resnet' or 'resnet50').
+        epochs (int): Number of training epochs.
+        batch_size (int): Batch size for training and evaluation.
+        freeze_layers (float): Fraction of layers to freeze (0 = train all, 1 = freeze all).
+        learning_rate (float): Learning rate for the optimizer.
+        loss_function (Callable): Loss function class (e.g., CrossEntropyLoss or BCEWithLogitsLoss).
+        optimizer (Callable): Optimizer class (e.g., Adam, SGD).
+        save_model_path (str): Path to save trained model weights.
+        validation_split (float): Ratio of data to use for validation.
+        test_split (float): Ratio of data to use for testing.
+        logging_interval (int): Interval (in epochs) to log metrics and validate.
+        num_workers (int): Number of worker threads for DataLoader.
+        input_size (int): Input image size (default 224x224).
+        augmentation (bool): Whether to apply basic data augmentation.
+        use_fp16 (bool): If True, trains the model using mixed precision (float16).
+        data_path (str): Base path to dataset directories (should include train/val/test).
+        padding (PaddingOptions): Padding strategy for input images.
+        weighted_loss (Tensor): Optional manual class weights for the loss function.
+        profiling_path (str): Path to save TensorBoard logs and profiler data.
+        load_model_path (str): Path to a checkpoint to resume training from.
+        custom_augment_figuratif (Callable): Optional transform for figurative images only.
+        custom_augment_abstrait (Callable): Optional transform for abstract images only.
+        double_abstract (bool): If True, includes both original and augmented abstract images.
+        n_transforms_augmented (int): Number of transforms to apply from augmentation pool (if used).
     """
     def __init__(
                     self, 
