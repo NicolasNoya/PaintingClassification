@@ -60,14 +60,14 @@ class PaintingsDataset(Dataset):
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224):
+    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False):
 
         # Path to the data directory
         self.data_path = data_path
         
         # Paths to the abstract and figurative paintings directories
-        self.abstract_path = os.path.join(data_path, 'abstrait-v2')
-        self.figurative_path = os.path.join(data_path, 'figuratif - aleat')
+        self.abstract_path = os.path.join(data_path, 'abstrait')
+        self.figurative_path = os.path.join(data_path, 'figuratif')
         self.abstract_list = os.listdir(self.abstract_path)
         self.figurative_list = os.listdir(self.figurative_path)
         self.abstract_list.sort()
@@ -85,10 +85,16 @@ class PaintingsDataset(Dataset):
         self.augmentation_abstrait = (custom_augment_abstrait if custom_augment_abstrait is not None else default_augment)
 
         # Padding configuration
-        if padding not in ['zero', 'mirror', 'replicate']:
+        if padding not in ['zero', 'mirror', 'replicate'] and  (padding is not None):
             raise ValueError("Padding must be one of 'zero', 'mirror', or 'replicate'.")
         self.padding = padding
         self.image_input_size = image_input_size
+
+        self.double_abstract = double_abstract
+        if self.double_abstract:
+            self.abstract_list = self.abstract_list * 2  #duplicate list to have original
+            self.len_abstract = len(self.abstract_list)
+            self.total_length = self.len_abstract + self.len_figurative
 
 
     def __len__(self):
@@ -105,20 +111,28 @@ class PaintingsDataset(Dataset):
         if idx < self.len_figurative:
             img_path = os.path.join(self.figurative_path, self.figurative_list[idx])
             label = 0
+            use_default = False
         else:
-            img_path = os.path.join(self.abstract_path, self.abstract_list[idx - self.len_figurative])
+            idx_adj = idx - self.len_figurative
+            base_idx = idx_adj % (self.len_abstract // 2) if self.double_abstract else idx_adj
+            use_default = self.double_abstract and idx_adj >= (self.len_abstract // 2)
+            img_path = os.path.join(self.abstract_path, self.abstract_list[base_idx])
             label = 1
+
 
         image = read_image(img_path)
         output['image'] = image
         output['label'] = label
 
         C, H, W = output['image'].shape
-        if self.augment: #figuratif
-            if label == 0: 
+        if self.augment:
+            if label == 0:
                 output['image'] = self.augmentation_figuratif(output['image']) 
             else:
-                output['image'] = self.augmentation_abstrait(output['image']) 
+                if use_default:
+                    output['image'] = default_augment(output['image'])
+                else:
+                    output['image'] = self.augmentation_abstrait(output['image'])
 
         if self.transform:
             transform_size = min(min(H, W) * 0.3, self.image_input_size)
@@ -150,6 +164,10 @@ class PaintingsDataset(Dataset):
                 padder = torch.nn.ReflectionPad2d(padding_tuple)                
         elif self.padding == 'replicate':
                 padder = torch.nn.ReplicationPad2d(padding_tuple) 
+        else:
+            output['image'] = output['image'].float() / 255.0
+            return output
+        
         try:
             output['image'] = padder(output['image'])
         except RuntimeError as e:

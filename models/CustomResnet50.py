@@ -68,4 +68,7 @@ class CustomResNet50(torch.nn.Module):
         self.model.to(self.device)
 
     def forward(self, x):
-        return self.model(x)
+        out = self.model(x)
+        # if out.shape[1] == 1:
+        #     out = torch.sigmoid(out) #if we are working with mse loss
+        return out
