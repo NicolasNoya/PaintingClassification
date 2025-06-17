@@ -3,6 +3,10 @@ import torch
 from typing import Literal
 from enum import Enum
 import numpy as np
+import random
+from torch.utils.data import Dataset
+from torchvision import transforms
+from PIL import Image
 
 import tqdm
 
@@ -31,6 +35,120 @@ class ModelsName(str, Enum):
     TWO_RESNET = 'two_branch_resnet'
     RESNET = 'resnet50'
 
+# Augmentations for the abstract images in the training set
+class SkewTransform:
+    def __init__(self, magnitude_range=(0.1, 0.4), direction="horizontal"):
+        self.magnitude_range = magnitude_range
+        self.direction = direction
+        self.to_tensor = transforms.ToTensor()
+
+    def __call__(self, img):
+        if not isinstance(img, Image.Image):
+            img = transforms.ToPILImage()(img)
+
+        width, height = img.size
+        magnitude = random.uniform(*self.magnitude_range)
+
+        if self.direction == "horizontal":
+            xshift = magnitude * width
+            matrix = (1, xshift / height, 0, 0, 1, 0)
+        else:  # vertical
+            yshift = magnitude * height
+            matrix = (1, 0, 0, yshift / width, 1, 0)
+
+        skewed = img.transform(img.size, Image.AFFINE, matrix)
+        return self.to_tensor(skewed)
+
+class RandomStretchFixedSide:
+    def __init__(self, deform_side: Literal["width", "height"], deform_range=(300, 450)):
+        self.deform_side = deform_side
+        self.deform_range = deform_range
+        self.center_crop = transforms.CenterCrop(224)
+
+    def __call__(self, img):
+        deform_value = random.randint(*self.deform_range)
+
+        if self.deform_side == "width":
+            size = (224, deform_value)
+        else:
+            size = (deform_value, 224)
+
+        img = transforms.Resize(size)(img)
+        img = self.center_crop(img)
+        return img
+
+transform_pool = [
+    transforms.RandomHorizontalFlip(p=1.0),
+    transforms.RandomVerticalFlip(p=1.0),
+    RandomStretchFixedSide("width", deform_range=(300, 450)),
+    RandomStretchFixedSide("height", deform_range=(300, 450)),
+    SkewTransform(magnitude_range=(0.1, 0.4), direction="horizontal"),
+    SkewTransform(magnitude_range=(0.1, 0.4), direction="vertical"),
+]
+
+class AugmentedOnlyTrainDataset(Dataset):
+    def __init__(self, base_dataset, n_augments=3, transform_pool=None, n_transforms_per_aug=2):
+        self.base_dataset = base_dataset
+        self.samples = []
+        self.transform_pool = transform_pool
+        self.n_transforms_per_aug = n_transforms_per_aug
+
+        if transform_pool is None:
+            self.transform_pool = [
+                transforms.RandomHorizontalFlip(p=1.0),
+                transforms.RandomVerticalFlip(p=1.0),
+                RandomStretchFixedSide("width", deform_range=(300, 450)),
+                RandomStretchFixedSide("height", deform_range=(300, 450)),
+                SkewTransform(magnitude_range=(0.1, 0.4), direction="horizontal"),
+                SkewTransform(magnitude_range=(0.1, 0.4), direction="vertical"),
+            ]
+
+        for i in range(len(base_dataset)):
+            label = base_dataset[i]['label']
+            self.samples.append(i)
+            if label == 1:
+                for j in range(1, n_augments + 1):
+                    self.samples.append((i, True, j))
+
+        random.shuffle(self.samples)
+
+    def __getitem__(self, idx):
+        sample_info = self.samples[idx]
+
+        if isinstance(sample_info, tuple):
+            base_idx, _, _ = sample_info # the third was the aug_id
+            sample = self.base_dataset[base_idx]
+            sample = sample.copy()
+            image = sample['image'].clone()
+
+            # composition
+            selected = random.sample(self.transform_pool, self.n_transforms_per_aug)
+            for t in selected:
+                image = t(image)
+
+            sample['image'] = image
+            #sample['aug_index'] = aug_id
+
+            if self.base_dataset.transform:
+                
+                C, H, W = image.shape
+                transform_size = min(min(H, W) * 0.3, self.base_dataset.image_input_size)
+                center_crop = transforms.CenterCrop(transform_size)
+                patch = center_crop(image.clone())
+                if transform_size < self.base_dataset.image_input_size:
+                    patch = torch.nn.functional.interpolate(
+                        patch.unsqueeze(0),
+                        size=(self.base_dataset.image_input_size, self.base_dataset.image_input_size),
+                        mode='bilinear'
+                    ).squeeze(0)
+                sample['transformed_image'] = patch.float()
+
+            return sample
+        else:
+            return self.base_dataset[sample_info]
+
+    def __len__(self):
+        return len(self.samples)
 
 class Interface:
     """
@@ -62,8 +180,10 @@ class Interface:
                     weighted_loss: torch.Tensor = None,
                     profiling_path: str = "log_dir/",
                     load_model_path: str = None,
-                    custom_augment_figuratif=None,
-                    custom_augment_abstrait=None,
+                    custom_augment_figuratif=None,                      #???????delete?????
+                    custom_augment_abstrait=None,                       #???????delete?????
+                    transform_pool: list = transform_pool,
+                    n_transforms_per_aug: int = 2
                 ):
         # Profiler
         self.profiler = Profiler(log_dir=profiling_path)
@@ -131,6 +251,18 @@ class Interface:
             val_train_dataset, 
             [len_train, len_val],
         )
+
+        print(f"Train dataset size before augmentation: {len(self.train_dataset)}")
+        # augmenting the abstract images of the training set
+        self.train_dataset = AugmentedOnlyTrainDataset(
+                            self.train_dataset,
+                            n_augments=n_augments_abstrait,
+                            transform_pool=transform_pool,
+                            n_transforms_per_aug=2
+                        )
+
+        print(f"Train dataset size after augmentation: {len(self.train_dataset)}")
+
         self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
         self.val_dataloader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
         self.test_dataloader = DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
@@ -370,6 +502,7 @@ class Interface:
 
 if __name__=="__main__":
     print("Starting training...")
+
     trainer = Interface(
         model= ModelsName.TWO_RESNET, 
         epochs=50, 
@@ -389,6 +522,9 @@ if __name__=="__main__":
         data_path="data",
         padding=PaddingOptions.ZERO,
         load_model_path = "./weights/best_f1_model0.7863.pth",
+        n_augments_abstrait=3,
+        transform_pool=transform_pool,
+        n_transforms_per_aug=2
     )
 
     trainer.project_embeddings(TrainTestVal.TEST)
