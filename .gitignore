@@ -1,5 +1,6 @@
 # Put the data into the data directory
 data
+new_dataset*
 
 # Ignore Python bytecode files
 .pychache
