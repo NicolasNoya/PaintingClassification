@@ -4,6 +4,7 @@ import torch
 from enum import Enum
 
 import tqdm
+import os
 
 from torch.utils.data import DataLoader
 from torch.optim import Adam
@@ -11,6 +12,7 @@ from torch.nn import CrossEntropyLoss
 
 from metric_manager import MetricManager
 from paintings_dataset import PaintingsDataset, PaddingOptions
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from profiler import Profiler
 
 from PIL import ImageDraw, ImageFont
@@ -91,7 +93,8 @@ class Interface:
                     custom_augment_abstrait=None,
                     n_transforms_augmented = 2,
                     noise: bool = False,
-                    noise_std: float = 0.1
+                    noise_std: float = 0.1,
+                    use_scheduler: bool = False
                 ):
 
         # Profiler
@@ -138,6 +141,17 @@ class Interface:
         self.logging_interval = logging_interval
         self.best_loss = float('inf')
         self.best_f1_score = 0.0
+        self.scheduler = None
+        self.use_scheduler = use_scheduler
+        if use_scheduler:
+            self.scheduler = ReduceLROnPlateau(
+                self.optimizer,
+                mode='max',
+                factor=0.5,
+                patience=2,
+                threshold=0.001,
+                threshold_mode='rel'
+            )
         
         # Computation configuration
         self.num_workers = num_workers
@@ -281,6 +295,11 @@ class Interface:
                 self.profiler.log_metric(metric_dict["accuracy"], metric_name="Train Accuracy", step=epochs)
                 running_loss = 0.0
                 val_loss, val_dict = self.validate()
+                if self.scheduler:
+                    self.scheduler.step(val_dict["f1_score"])
+                    for i, param_group in enumerate(self.optimizer.param_groups):
+                        print(f"Learning rate at epoch {epochs+1}, group {i}: {param_group['lr']:.6f}")
+
                 self.profiler.log_metric(val_loss, metric_name="Val Loss", step=epochs)
                 self.profiler.log_metric(val_dict["f1_score"], metric_name="Val F1 Score", step=epochs)
                 self.profiler.log_metric(val_dict["accuracy"], metric_name="Val Accuracy", step=epochs)
@@ -582,6 +601,69 @@ class Interface:
     
         return all_examples
 
+
+    def save_all_test_predictions(self, save_path):
+        """
+        Guarda todas las imágenes del test set clasificadas según predicción
+        en carpetas separadas: abstrait/figuratif, correct/wrong.
+    
+        Args:
+            save_path (str): Ruta base donde guardar las imágenes.
+        """
+        self.model_instance.eval()
+    
+        # Crear carpetas
+        for label in ["abstrait", "figuratif"]:
+            for status in ["correct", "wrong"]:
+                os.makedirs(os.path.join(save_path, f"{label}_{status}"), exist_ok=True)
+    
+        with torch.no_grad():
+            for idx, img_dict in enumerate(self.test_dataloader):
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+    
+                if self.model_name == ModelsName.TWO_RESNET:
+                    patches = img_dict['transformed_image'].to(device)
+                    outputs = self.model_instance(images, patches)
+                else:
+                    outputs = self.model_instance(images)
+    
+                if isinstance(self.loss_function, torch.nn.BCEWithLogitsLoss):
+                    probs = torch.sigmoid(outputs).squeeze(1)
+                    preds = (probs > 0.5).long()
+                else:
+                    probs = torch.softmax(outputs, dim=1)[:, 1]
+                    preds = (probs > 0.5).long()
+    
+                for i in range(len(images)):
+                    prob = probs[i].item()
+                    pred = preds[i].item()
+                    gt   = labels[i].item()
+                    img  = images[i].cpu()
+    
+                    # Convertir a PIL y dibujar texto
+                    pil_img = F.to_pil_image(img)
+                    draw = ImageDraw.Draw(pil_img)
+                    txt = f"prob: {prob:.2f} | pred: {pred} | gt: {gt}"
+                    try:
+                        font = ImageFont.truetype("arial.ttf", 24)
+                    except:
+                        font = ImageFont.load_default()
+    
+                    if hasattr(draw, "textbbox"):
+                        x0, y0, x1, y1 = draw.textbbox((0, 0), txt, font=font)
+                        text_w, text_h = x1 - x0, y1 - y0
+                    else:
+                        text_w, text_h = draw.textsize(txt, font=font)
+    
+                    draw.rectangle([(0, 0), (text_w + 10, text_h + 10)], fill=(0, 0, 0))
+                    draw.text((5, 5), txt, fill=(255, 255, 255), font=font)
+    
+                    class_str = "abstrait" if pred == 1 else "figuratif"
+                    correct   = (pred == gt)
+                    status    = "correct" if correct else "wrong"
+                    filename  = os.path.join(save_path, f"{class_str}_{status}", f"img_{idx}_{i}_p{prob:.2f}_gt{gt}.png")
+                    pil_img.save(filename)
 
 
 if __name__=="__main__":
