@@ -2,6 +2,7 @@
 data
 new_dataset*
 img
+*.zip
 
 # Ignore Python bytecode files
 .pychache

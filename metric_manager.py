@@ -1,6 +1,6 @@
 
 import torch
-from torchmetrics.classification import Accuracy, F1Score, Precision, Recall
+from torchmetrics.classification import Accuracy, Precision, Recall, F1Score
 from torchmetrics import ConfusionMatrix
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -15,9 +15,9 @@ class MetricManager:
         Initializes the MetricManager with the required metrics.
         """
         self.accuracy = Accuracy(task="binary").to(device)
-        self.f1_score = F1Score(task="binary",num_classes=2, average='macro').to(device)
-        self.precision = Precision(task="binary",num_classes=2, average='macro').to(device)
-        self.recall = Recall(task="binary",num_classes=2, average='macro').to(device)
+        self.f1_score = F1Score(task="multiclass",num_classes=2,average='macro').to(device)
+        self.precision = Precision(task="multiclass",num_classes=2, average='macro').to(device)
+        self.recall = Recall(task="multiclass",num_classes=2, average='macro').to(device)
         self.confussion_matrix = ConfusionMatrix(task="binary").to(device)
 
     def update_metrics(self, preds, targets):
@@ -29,6 +29,15 @@ class MetricManager:
         Returns:
             dict: Dictionary containing accuracy, F1 score, precision, and recall.
         """
+        # Ensure predictions are binary integers (0 or 1)
+        if preds.dtype == torch.float32 or preds.dtype == torch.float64:
+            # Assume preds are probabilities — apply threshold
+            preds = (preds > 0.5).int()
+        else:
+            # Already logits or labels — just ensure they're ints
+            preds = preds.int()
+
+        targets = targets.int()
         self.accuracy.update(preds, targets)
         self.f1_score.update(preds, targets)
         self.precision.update(preds, targets)
