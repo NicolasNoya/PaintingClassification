@@ -89,7 +89,9 @@ class Interface:
                     load_model_path: str = None,
                     custom_augment_figuratif=None,
                     custom_augment_abstrait=None,
-                    n_transforms_augmented = 2
+                    n_transforms_augmented = 2,
+                    noise: bool = False,
+                    noise_std: float = 0.1
                 ):
 
         # Profiler
@@ -151,6 +153,8 @@ class Interface:
         self.augmentation = augmentation
         self.input_size = input_size
         self.padding = padding
+        self.noise = noise
+        self.noise_std = noise_std
 
         # Initialize the dataset and dataloader
         
@@ -161,23 +165,29 @@ class Interface:
                                         image_input_size=self.input_size,
                                         custom_augment_abstrait=custom_augment_abstrait,
                                         custom_augment_figuratif=custom_augment_figuratif,
-                                        n_transforms_augmented=n_transforms_augmented)
-        
+                                        n_transforms_augmented=n_transforms_augmented,
+                                        noise=self.noise,
+                                        noise_std=self.noise_std)
+
         self.dataset_val = PaintingsDataset(self.data_path+'val/',
                                         augment=False, 
                                         transform=self.transform, 
                                         padding=self.padding, 
                                         image_input_size=self.input_size,
                                         custom_augment_abstrait=None,
-                                        custom_augment_figuratif=None,)
-        
+                                        custom_augment_figuratif=None,
+                                        noise=self.noise,
+                                        noise_std=self.noise_std)
+
         self.dataset_test = PaintingsDataset(self.data_path+'test/',
                                         augment=False, 
                                         transform=self.transform, 
                                         padding=self.padding, 
                                         image_input_size=self.input_size,
                                         custom_augment_abstrait=None,
-                                        custom_augment_figuratif=None,)
+                                        custom_augment_figuratif=None,
+                                        noise=self.noise,
+                                        noise_std=self.noise_std)
 
         n_figurative = self.dataset_train.len_figurative #only for training
         n_abstract = self.dataset_train.len_abstract
