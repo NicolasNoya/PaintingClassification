@@ -14,7 +14,6 @@ import random
 from transformations.transformations import SkewTransform,RandomStretch
 
 
-
 # default_augment = transforms.Compose([
 #         transforms.RandomHorizontalFlip(),
 #         transforms.RandomVerticalFlip(),
@@ -39,7 +38,6 @@ transform_pool = [
     SkewTransform((0.1, 0.4), "vertical"),
 ]
 
-
 # Class for literal padding options
 class PaddingOptions(str, Enum):
     ZERO = 'zero'
@@ -54,8 +52,8 @@ class PaintingsDataset(Dataset):
     
     ###############################################################################
     IMPORTANT: The directory structure should be as follows:
-    - abstrait (where the abstract paintings are stored)
-    - figuratif (where the figurative paintings are stored)
+    - abstrait-v2 (where the abstract paintings are stored)
+    - figuratif - aleat (where the figurative paintings are stored)
     ###############################################################################
 
     The dataset will return a list with the images and their corresponding labels.
@@ -74,19 +72,8 @@ class PaintingsDataset(Dataset):
     
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
-
-    Args:
-        data_path (str): Root directory containing 'abstrait/' and 'figuratif/' subfolders.
-        augment (bool): If True, apply data augmentation to the images.
-        transform (bool): If True, return both the image and a center-cropped transformed version.
-        custom_augment_figuratif (callable): Optional transform for figurative images. Defaults to predefined augmentations.
-        custom_augment_abstrait (callable): Optional transform for abstract images. Defaults to a random composition.
-        padding (PaddingOptions): Padding method to apply when resizing ('zero', 'mirror', 'replicate').
-        image_input_size (int): Final image size after resizing and padding (default: 224).
-        double_abstract (bool): If True, duplicate abstract images to return both original and augmented versions.
-        n_transforms_augmented (int): Number of transforms to randomly sample from the transform pool for abstract augmentation.
     """
-    def __init__(self, data_path='new_data/', augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding = PaddingOptions.ZERO, image_input_size: int = 224,double_abstract = False,n_transforms_augmented=2):
+    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224,n_transforms_augmented=2):
 
         # Path to the data directory
         self.data_path = data_path
@@ -107,23 +94,17 @@ class PaintingsDataset(Dataset):
         # Augmentation and transformation parameters
         self.augment = augment
         self.transform = transform
-
+        
         default_augment_abstrait = transforms.Compose(random.sample(transform_pool, n_transforms_augmented))
-
+        
         self.augmentation_figuratif = (custom_augment_figuratif if custom_augment_figuratif is not None else default_augment)
         self.augmentation_abstrait = (custom_augment_abstrait if custom_augment_abstrait is not None else default_augment_abstrait)
 
         # Padding configuration
-        if padding not in ['zero', 'mirror', 'replicate'] and  (padding is not None):
+        if padding not in ['zero', 'mirror', 'replicate']:
             raise ValueError("Padding must be one of 'zero', 'mirror', or 'replicate'.")
         self.padding = padding
         self.image_input_size = image_input_size
-
-        self.double_abstract = double_abstract
-        if self.double_abstract:
-            self.abstract_list = self.abstract_list * 2  #duplicate list to have original
-            self.len_abstract = len(self.abstract_list)
-            self.total_length = self.len_abstract + self.len_figurative
 
 
     def __len__(self):
@@ -140,28 +121,22 @@ class PaintingsDataset(Dataset):
         if idx < self.len_figurative:
             img_path = os.path.join(self.figurative_path, self.figurative_list[idx])
             label = 0
-            use_default = False
         else:
-            idx_adj = idx - self.len_figurative
-            base_idx = idx_adj % (self.len_abstract // 2) if self.double_abstract else idx_adj
-            use_default = self.double_abstract and idx_adj >= (self.len_abstract // 2)
-            img_path = os.path.join(self.abstract_path, self.abstract_list[base_idx])
+            img_path = os.path.join(self.abstract_path, self.abstract_list[idx - self.len_figurative])
             label = 1
-
 
         image = read_image(img_path)
         output['image'] = image
+        #output['image_original'] = image.clone()
         output['label'] = label
 
         C, H, W = output['image'].shape
         if self.augment:
-            if label == 0:
-                output['image'] = self.augmentation_figuratif(output['image']) 
-            else:
-                if use_default:
-                    output['image'] = default_augment(output['image'])
-                else:
-                    output['image'] = self.augmentation_abstrait(output['image'])
+            if label == 1 and random.random()<0.5: 
+                output['image'] = self.augmentation_abstrait(output['image']) 
+            
+            #output['image'] = self.augmentation_figuratif(output['image']) 
+            
 
         if self.transform:
             transform_size = min(min(H, W) * 0.3, self.image_input_size)
@@ -193,10 +168,6 @@ class PaintingsDataset(Dataset):
                 padder = torch.nn.ReflectionPad2d(padding_tuple)                
         elif self.padding == 'replicate':
                 padder = torch.nn.ReplicationPad2d(padding_tuple) 
-        else:
-            output['image'] = output['image'].float() / 255.0
-            return output
-        
         try:
             output['image'] = padder(output['image'])
         except RuntimeError as e:

@@ -89,7 +89,6 @@ class Interface:
                     load_model_path: str = None,
                     custom_augment_figuratif=None,
                     custom_augment_abstrait=None,
-                    double_abstract: bool = False,
                     n_transforms_augmented = 2
                 ):
 
@@ -162,7 +161,7 @@ class Interface:
                                         image_input_size=self.input_size,
                                         custom_augment_abstrait=custom_augment_abstrait,
                                         custom_augment_figuratif=custom_augment_figuratif,
-                                        double_abstract=double_abstract)
+                                        n_transforms_augmented=n_transforms_augmented)
         
         self.dataset_val = PaintingsDataset(self.data_path+'val/',
                                         augment=False, 
@@ -170,7 +169,7 @@ class Interface:
                                         padding=self.padding, 
                                         image_input_size=self.input_size,
                                         custom_augment_abstrait=None,
-                                        custom_augment_figuratif=None)
+                                        custom_augment_figuratif=None,)
         
         self.dataset_test = PaintingsDataset(self.data_path+'test/',
                                         augment=False, 
@@ -494,6 +493,84 @@ class Interface:
         start_epoch = checkpoint.get('epoch', 0) + 1
         print(f"Checkpoint loaded from {path}, starting at epoch {start_epoch}")
         return start_epoch
+    
+
+    def get_difficult_test_examples(self):
+        self.model_instance.eval()
+        uncertain_abstract = []
+        uncertain_figurative = []
+        confident_abstract = []
+        confident_figurative = []
+    
+        with torch.no_grad():
+            for img_dict in self.test_dataloader:
+                images = img_dict['image'].to(device)
+                labels = img_dict['label'].to(device)
+    
+                if self.model_name == ModelsName.TWO_RESNET:
+                    patches = img_dict['transformed_image'].to(device)
+                    outputs = self.model_instance(images, patches)
+                else:
+                    outputs = self.model_instance(images)
+    
+                probs = torch.softmax(outputs, dim=1)[:, 1]
+                preds = (probs > 0.5).long()
+    
+                for i in range(len(labels)):
+                    label = labels[i].item()
+                    pred = preds[i].item()
+                    prob = probs[i].item()
+                    img = images[i].cpu()
+    
+                    if pred != label:
+                        dist = abs(prob - 0.5)
+                        pil_img = F.to_pil_image(img)
+                        draw = ImageDraw.Draw(pil_img)
+                        txt = f"{prob:.2f}"
+                        try:
+                            font = ImageFont.truetype("arial.ttf", 32)
+                        except:
+                            font = ImageFont.load_default()
+    
+                        if hasattr(draw, "textbbox"):
+                            x0, y0, x1, y1 = draw.textbbox((0, 0), txt, font=font)
+                            text_w, text_h = x1 - x0, y1 - y0
+                        else:
+                            text_w, text_h = draw.textsize(txt, font=font)
+    
+                        draw.rectangle([(0, 0), (text_w + 10, text_h + 10)], fill=(0, 0, 0, 128))
+                        draw.text((5, 5), txt, fill=(255, 255, 255), font=font)
+    
+                        example = (dist, pil_img, label, pred, prob)
+    
+                        if dist < 0.2:
+                            if label == 1 and len(uncertain_abstract) < 3:
+                                uncertain_abstract.append(example)
+                            elif label == 0 and len(uncertain_figurative) < 3:
+                                uncertain_figurative.append(example)
+    
+                        elif dist > 0.4:
+                            if label == 1 and len(confident_abstract) < 3:
+                                confident_abstract.append(example)
+                            elif label == 0 and len(confident_figurative) < 3:
+                                confident_figurative.append(example)
+    
+                    if (len(uncertain_abstract) == 3 and len(uncertain_figurative) == 3 and
+                        len(confident_abstract) == 3 and len(confident_figurative) == 3):
+                        break
+    
+        # Rellenar si faltan
+        all_examples = (
+            uncertain_abstract +
+            uncertain_figurative +
+            confident_abstract +
+            confident_figurative
+        )
+    
+        while len(all_examples) < 12:
+            all_examples.append(None)
+    
+        return all_examples
 
 
 
