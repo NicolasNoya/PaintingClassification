@@ -45,27 +45,29 @@ class Interface:
         model (ModelsName): Model architecture to use ('two_branch_resnet' or 'resnet50').
         epochs (int): Number of training epochs.
         batch_size (int): Batch size for training and evaluation.
-        freeze_layers (float): Fraction of layers to freeze (0 = train all, 1 = freeze all).
+        freeze_layers (float): Fraction of ResNet layers to freeze (0 = train all, 1 = freeze all).
         learning_rate (float): Learning rate for the optimizer.
         loss_function (Callable): Loss function class (e.g., CrossEntropyLoss or BCEWithLogitsLoss).
         optimizer (Callable): Optimizer class (e.g., Adam, SGD).
-        save_model_path (str): Path to save trained model weights.
-        validation_split (float): Ratio of data to use for validation.
-        test_split (float): Ratio of data to use for testing.
-        logging_interval (int): Interval (in epochs) to log metrics and validate.
-        num_workers (int): Number of worker threads for DataLoader.
-        input_size (int): Input image size (default 224x224).
-        augmentation (bool): Whether to apply basic data augmentation.
-        use_fp16 (bool): If True, trains the model using mixed precision (float16).
-        data_path (str): Base path to dataset directories (should include train/val/test).
+        save_model_path (str): Directory to save trained model weights.
+        validation_split (float): Fraction of the training data used for validation.
+        test_split (float): Fraction of the training data used for testing.
+        logging_interval (int): Number of epochs between logging metrics and validation.
+        num_workers (int): Number of workers used in the DataLoader.
+        input_size (int): Size of input images (default is 224x224).
+        augmentation (bool): Whether to apply standard data augmentation.
+        use_fp16 (bool): If True, uses mixed precision training (float16).
+        data_path (str): Base path to dataset directories (should include images and labels).
         padding (PaddingOptions): Padding strategy for input images.
-        weighted_loss (Tensor): Optional manual class weights for the loss function.
+        weighted_loss (Tensor): Optional tensor with class weights for the loss function.
         profiling_path (str): Path to save TensorBoard logs and profiler data.
-        load_model_path (str): Path to a checkpoint to resume training from.
-        custom_augment_figuratif (Callable): Optional transform for figurative images only.
-        custom_augment_abstrait (Callable): Optional transform for abstract images only.
-        double_abstract (bool): If True, includes both original and augmented abstract images.
-        n_transforms_augmented (int): Number of transforms to apply from augmentation pool (if used).
+        load_model_path (str): Path to pretrained model weights to resume training or evaluation.
+        custom_augment_figuratif (Callable): Custom transform applied only to figurative images.
+        custom_augment_abstrait (Callable): Custom transform applied only to abstract images.
+        n_transforms_augmented (int): Number of random transforms to apply per image for augmentation.
+        noise (bool): If True, adds Gaussian noise to images.
+        noise_std (float): Standard deviation of the Gaussian noise.
+        use_scheduler (bool): If True, enables learning rate scheduler during training.
     """
     def __init__(
                     self, 
@@ -402,7 +404,7 @@ class Interface:
                 if isinstance(self.loss_function, torch.nn.BCEWithLogitsLoss):
                     labels = labels.float().to(device)
                     labels_for_loss = labels.unsqueeze(1)
-                    probs  = torch.sigmoid(outputs).squeeze(1)       # 0-1 prob. “abstracto”
+                    probs  = torch.sigmoid(outputs).squeeze(1)       #0-1 prob. “abstracto”
                     preds  = (probs > 0.5).long()
 
                     labels_for_metrics = labels.long()
@@ -411,7 +413,7 @@ class Interface:
                     running_loss += loss.item()
                     self.test_metric_manager.update_metrics(preds, labels_for_metrics)
                     
-                else:   # CrossEntropy
+                else:   #crossEntropy
                     labels = labels.long().to(device).squeeze()
                     probs  = torch.softmax(outputs, dim=1)[:, 1]     
                     preds  = (probs > 0.5).long()                    
@@ -430,7 +432,7 @@ class Interface:
                     pil_img = F.to_pil_image(img)
                     draw    = ImageDraw.Draw(pil_img)
                     txt  = f"{prob:.2f}"
-                    # intenta usar una fuente TTF; si no, usa la default
+                    
                     try:
                         font = ImageFont.truetype("arial.ttf", 32)
                     except:
@@ -588,7 +590,7 @@ class Interface:
                         len(confident_abstract) == 3 and len(confident_figurative) == 3):
                         break
     
-        # Rellenar si faltan
+
         all_examples = (
             uncertain_abstract +
             uncertain_figurative +
@@ -604,15 +606,16 @@ class Interface:
 
     def save_all_test_predictions(self, save_path):
         """
-        Guarda todas las imágenes del test set clasificadas según predicción
-        en carpetas separadas: abstrait/figuratif, correct/wrong.
-    
+        Saves all test set images classified according to prediction
+        into separate folders: abstract/figurative, correct/wrong.
+
         Args:
-            save_path (str): Ruta base donde guardar las imágenes.
+            save_path (str): Base path where to save the images.
         """
+
         self.model_instance.eval()
     
-        # Crear carpetas
+        #create folders
         for label in ["abstrait", "figuratif"]:
             for status in ["correct", "wrong"]:
                 os.makedirs(os.path.join(save_path, f"{label}_{status}"), exist_ok=True)
@@ -641,7 +644,6 @@ class Interface:
                     gt   = labels[i].item()
                     img  = images[i].cpu()
     
-                    # Convertir a PIL y dibujar texto
                     pil_img = F.to_pil_image(img)
                     draw = ImageDraw.Draw(pil_img)
                     txt = f"prob: {prob:.2f} | pred: {pred} | gt: {gt}"
