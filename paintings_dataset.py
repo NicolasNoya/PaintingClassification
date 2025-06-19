@@ -73,7 +73,7 @@ class PaintingsDataset(Dataset):
     In case of `transform` being True, the dataset will apply transformations to the images or 
     a custom transformation can be passed as a parameter named `custom_transform`(if None we will use custom).
     """
-    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224,n_transforms_augmented=2):
+    def __init__(self, data_path, augment= False, transform=False, custom_augment_figuratif=None,custom_augment_abstrait=None, padding: PaddingOptions = PaddingOptions.ZERO, image_input_size: int = 224,n_transforms_augmented=2, noise: bool = False, noise_std: float = 0.1):
 
         # Path to the data directory
         self.data_path = data_path
@@ -105,6 +105,10 @@ class PaintingsDataset(Dataset):
             raise ValueError("Padding must be one of 'zero', 'mirror', or 'replicate'.")
         self.padding = padding
         self.image_input_size = image_input_size
+
+        # Noise configuration
+        self.noise = noise
+        self.noise_std = noise_std
 
 
     def __len__(self):
@@ -176,6 +180,17 @@ class PaintingsDataset(Dataset):
                                                                 size=(max(imh, int(self.image_input_size / 2 + 1)), max(imw, int(self.image_input_size/2 + 1))), 
                                                                 mode='nearest').squeeze(0).clone()
         output['image'] = output['image'].float() / 255.0  # Normalize the image to [0, 1]
+
+        # Noise configuration
+        if self.noise:
+            noise = torch.randn_like(output['image']) * self.noise_std
+            output['image'] = torch.clamp(output['image'] + noise, 0.0, 1.0)
+
+        # Apply noise to transformed image (if it exists and noise enabled)
+        if self.noise and self.transform:
+            noise_transformed = torch.randn_like(output['transformed_image']) * self.noise_std
+            output['transformed_image'] = torch.clamp(output['transformed_image'] + noise_transformed, 0.0, 1.0)
+            
         return output
 
     def change_padding(self, padding: Literal['zero', 'mirror', 'replicate'], image_input_size: int = 224): 
