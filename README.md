@@ -17,8 +17,7 @@ The main objective of this project is to determine whether a given painting is a
 
 ## Findings
 
-- The **ResNet baseline** achieved solid results largely because figurative paintings often contain recognizable objects (faces, animals, everyday items). ResNet, pretrained on ImageNet, leveraged its object-detection ability to separate figurative from abstract works.  
-- The **dual-architecture approach** improved robustness by combining context from the entire image with detailed inspection of patches. This reduced bias toward large salient objects and allowed better handling of cases where figurative cues were subtle or abstract works contained object-like forms.  
+- The **ResNet baseline** achieved solid results largely because figurative paintings often contain recognizable objects (faces, animals, everyday items). ResNet, pretrained on ImageNet, leveraged its object-detection ability to separate figurative from abstract works.   
 - A key observation is that models pretrained on object-centric datasets like ImageNet may perform well on figurative art due to transfer learning but risk overfitting to unintended cues rather than true abstractness.
 
 
