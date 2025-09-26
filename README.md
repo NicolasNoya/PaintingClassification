@@ -2,7 +2,6 @@
 
 The main objective of this project is to determine whether a given painting is abstract or not. Multiple approaches are explored for this classification task. The first approach uses a standard supervised classification pipeline.
 
----
 
 ## Approaches
 
@@ -15,7 +14,6 @@ The main objective of this project is to determine whether a given painting is a
   - **Patch View**: A cropped region of the painting is processed separately to focus on localized patterns and finer details.  
   The features from both branches are then combined for classification, allowing the model to balance holistic understanding with localized evidence.
 
----
 
 ## Findings
 
@@ -23,13 +21,11 @@ The main objective of this project is to determine whether a given painting is a
 - The **dual-architecture approach** improved robustness by combining context from the entire image with detailed inspection of patches. This reduced bias toward large salient objects and allowed better handling of cases where figurative cues were subtle or abstract works contained object-like forms.  
 - A key observation is that models pretrained on object-centric datasets like ImageNet may perform well on figurative art due to transfer learning but risk overfitting to unintended cues rather than true abstractness.
 
----
 
 ## Dependency Management
 
 This project uses **Poetry** for dependency management. All required libraries are included, except for **PyTorch**, since different versions may be needed depending on the target device. Please install the appropriate version of PyTorch for your environment from [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/).
 
----
 
 ## Project Structure
 
@@ -42,7 +38,6 @@ To ensure modularity and atomicity, the project follows this folder and class st
 - **Profiling and Analysis**: A class used for profiling during training and for data analysis.
 - **Research**: A folder dedicated to experimental or preliminary code. This is not intended for production use and is generally not recommended for reference.
 
----
 
 ## Future Work
 
@@ -51,5 +46,5 @@ To ensure modularity and atomicity, the project follows this folder and class st
 - Explore interpretability methods (Grad-CAM, feature visualization) to understand which regions the models rely on when classifying abstract vs. figurative paintings.  
 - Evaluate on additional datasets of paintings to test generalization beyond MNIST-like binary abstraction/figurative splits.  
 
----
+
 
